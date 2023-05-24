@@ -12,10 +12,11 @@ import win32con
 import win32gui
 import win32process
 import win32ui
-from img_tool import ImgTool
-from keyboard import Keyboard
-from mouse import Mouse
 from PIL import Image
+
+from wctrl.img_tool import ImgTool
+from wctrl.keyboard import Keyboard
+from wctrl.mouse import Mouse
 
 # 桌面句柄
 WINDOW_HWIN = win32gui.GetDesktopWindow()
