@@ -72,18 +72,9 @@ VkCode = {
 
 
 class Keyboard:
-    def __init__(
-        self, windowName: str = None, className: str = None, window=None
-    ) -> None:
-        """为一个窗口创建一个键盘，参数与 win32ui.FindWindow 函数相同
-        当 windowName 为空时将选择当前活动窗口为目标窗口
-        """
-        if window != None:
-            self.__window = window
-        elif windowName == None:
-            self.__window = win32ui.GetForegroundWindow()
-        else:
-            self.__window = win32ui.FindWindow(className, windowName)
+    def __init__(self, handle: int) -> None:
+        """为一个窗口创建一个键盘, handle 是窗口的句柄可以使用 win32gui.FindWindow 获取"""
+        self.__window = win32ui.CreateWindowFromHandle(handle)
 
     def __getKey(self, keyname: str, key: int):
         if keyname == "":
@@ -91,7 +82,7 @@ class Keyboard:
 
         if len(keyname) == 1 and keyname in printable:
             # https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-vkkeyscana
-            return win32api.VkKeyScan(keyname) & 0xFF
+            return win32api.VkKeyScan(keyname) & 0xFF  # type: ignore
         else:
             return VkCode[keyname]
 

@@ -3,7 +3,6 @@ import ctypes
 import math
 import threading
 import time
-from typing import List
 
 import cv2
 import psutil
@@ -13,10 +12,6 @@ import win32gui
 import win32process
 import win32ui
 from PIL import Image
-
-from wctrl.img_tool import ImgTool
-from wctrl.keyboard import Keyboard
-from wctrl.mouse import Mouse
 
 # 桌面句柄
 WINDOW_HWIN = win32gui.GetDesktopWindow()
@@ -60,7 +55,7 @@ def click(button: str = "left", duration=0.01):
     win32api.mouse_event(win32con.MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
 
 
-def getPids(name: str):
+def getPids(name: str) -> list[int]:
     """获取一个进程的 pid, name 是程序的名称，例如 "java.exe" """
     result = []
     for proc in psutil.process_iter(["pid", "name"]):
@@ -69,11 +64,11 @@ def getPids(name: str):
     return result
 
 
-def getWindowsWithPid(pid: int):
+def getWindowsWithPid(pid: int) -> list[int]:
     """获取进程的所有可视窗口的 hwnd
     之后可以使用 win32ui.CreateWindowFromHandle 函数构建 App 所需的 window
     """
-    windows: List[int] = []
+    windows: list[int] = []
 
     def callback(hwnd, hwnds):
         if win32gui.IsWindowEnabled(hwnd) and win32gui.IsWindowVisible(hwnd):
@@ -85,9 +80,9 @@ def getWindowsWithPid(pid: int):
     return windows
 
 
-def showCvMat(winname: str, mat: any):
+def showCvMat(winname: str, mat: cv2.Mat) -> None:
     cv2.imshow(winname, mat)
-    window = win32ui.FindWindow(None, winname)
+    window = win32ui.FindWindow("", winname)
     window.CenterWindow()
     cv2.waitKey()
 
@@ -123,7 +118,7 @@ def screencap():
     # 获取位图字节数据
     bits = bmp.GetBitmapBits(True)
     win32gui.DeleteObject(bmp.GetHandle())
-    bmp_bytes = bytes(bits)
+    bmp_bytes = bytes(bits, "", "")
     pil_image = Image.frombytes(
         "RGBA",
         (SCREEN_WIDTH, SCREEN_HEIGHT),
@@ -152,153 +147,8 @@ def windowcap(window):
     # 获取位图字节数据
     bits = bmp.GetBitmapBits(True)
     win32gui.DeleteObject(bmp.GetHandle())
-    bmp_bytes = bytes(bits)
+    bmp_bytes = bytes(bits, "", "")
     pil_image = Image.frombytes(
         "RGB", (width, height), bmp_bytes, "raw", "BGRX", 0, width * 4
     )
     return pil_image
-
-
-class App:
-    def __init__(
-        self,
-        windowName: str = None,
-        className: str = None,
-        window=None,
-        threshold=0.9,
-        is_set_center=False,
-        method=cv2.TM_CCORR_NORMED,
-        is_use_mask=False,
-        is_show=False,
-    ) -> None:
-        """通过 windowName 和 className 来查找窗口，或者你也可以指定 window
-        后面的参数与 ImgTool 的初始化参数相同
-        """
-
-        if window != None:
-            self.__window = window
-        elif windowName == None:
-            self.__window = win32ui.GetForegroundWindow()
-        else:
-            self.__window = win32ui.FindWindow(className, windowName)
-
-        # 键盘相关
-        self.__keyboard = Keyboard(window=self.__window)
-        # 鼠标相关
-        self.__mouse = Mouse(window=window)
-        # 截图相关
-        self.__capLock = threading.Lock()
-        self.__dc = self.__window.GetDC()
-        self.__memdc = self.__dc.CreateCompatibleDC()
-        atexit.register(self.__dc.DeleteDC)
-        atexit.register(self.__memdc.DeleteDC)
-        # cv相关
-        self.__nowImg: Image = None
-        self.__isWindowLocked = False
-        self.__imgTool = ImgTool(threshold, is_set_center, method, is_use_mask, is_show)
-
-    def keyDown(self, keyname: str, hold: float = 0, is_sync=False, key: int = 0):
-        """与 Keyboard.down 相同"""
-        return self.__keyboard.down(keyname, hold, is_sync, key)
-
-    def keyUp(self, keyname="", key: int = 0):
-        """与 Keyboard.up 相同"""
-        return self.__keyboard.up(keyname, key)
-
-    def MouseLDown(self, x: int, y: int):
-        self.__mouse.leftDown(x, y)
-
-    def MouseRDown(self, x: int, y: int):
-        self.__mouse.rightDown(x, y)
-
-    def MouseLUp(self, x: int, y: int):
-        self.__mouse.leftUp(x, y)
-
-    def MouseRUp(self, x: int, y: int):
-        self.__mouse.rightUp(x, y)
-
-    def MouseScoor(self, x: int, y: int, v: int):
-        self.__mouse.scrool(x, y, v)
-
-    def cap(self):
-        self.__capLock.acquire()
-        rect = self.__window.GetClientRect()
-        width, height = rect[2], rect[3]
-        bmp = win32ui.CreateBitmap()
-        bmp.CreateCompatibleBitmap(self.__dc, width, height)
-        self.__memdc.SelectObject(bmp)
-        self.__memdc.BitBlt(
-            (0, 0), (width, height), self.__dc, (0, 0), win32con.SRCCOPY
-        )
-        # 获取位图字节数据
-        bits = bmp.GetBitmapBits(True)
-        win32gui.DeleteObject(bmp.GetHandle())
-        self.__capLock.release()
-        bmp_bytes = bytes(bits)
-        pil_image = Image.frombytes(
-            "RGB", (width, height), bmp_bytes, "raw", "BGRX", 0, width * 4
-        )
-        return pil_image
-
-    def getNowImg(self):
-        """获取当前 find 和 mfind 方法所处理的图像"""
-        if self.__isWindowLocked:
-            if self.__nowImg == None:
-                self.__nowImg = self.cap()
-            return self.__nowImg
-        else:
-            self.__nowImg = self.cap()
-            return self.__nowImg
-
-    def find(
-        self,
-        tmpl: str,
-        threshold: float = None,
-        is_set_center: bool = None,
-        method: int = None,
-        is_use_mask: bool = None,
-        is_show: bool = None,
-        img: Image = None,
-    ):
-        """参数同 ImgTool.find
-        有所不同的是，此方法默认从窗口中截图来获取 img
-        当输入参数中 img 不为 None 时便不会自动截图，而是使用传入的 img
-        """
-        if img == None:
-            img = self.getNowImg()
-
-        return self.__imgTool.find(
-            img, tmpl, threshold, is_set_center, method, is_use_mask, is_show
-        )
-
-    def mfind(
-        self,
-        tmpl: str,
-        threshold: float = None,
-        is_set_center: bool = None,
-        method: int = None,
-        is_use_mask: bool = None,
-        is_show: bool = None,
-        img: Image = None,
-    ):
-        """参数同 ImgTool.mfind
-        有所不同的是，此方法默认从窗口中截图来获取 img
-        当输入参数中 img 不为 None 时便不会自动截图，而是使用传入的 img
-        """
-        if img == None:
-            img = self.getNowImg()
-
-        return self.__imgTool.mfind(
-            img, tmpl, threshold, is_set_center, method, is_use_mask, is_show
-        )
-
-    def lockWindow(self):
-        """锁定 find 和 mfind 方法使用的 img
-        在调用 unlockWindow 之前, find 和 mfind 不再重新截图
-        一般与 unlockWindow 成对使用
-        """
-        self.__isWindowLocked = True
-
-    def unlockWindow(self):
-        """解除 lockWindow"""
-        self.__isWindowLocked = False
